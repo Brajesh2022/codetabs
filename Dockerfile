@@ -1,33 +1,29 @@
-# Use a customized Go image that allows installing packages
-FROM golang:1.14-buster
+FROM golang:1.22 AS builder
+LABEL "language"="go"
 
-# 1. Install the system dependencies mentioned in your README
-RUN apt-get update && apt-get install -y \
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=1 go build -o main .
+
+FROM debian:bookworm-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     curl \
     git \
+    sqlite3 \
     p7zip-full \
     zip \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Set working directory
-WORKDIR /app
+COPY --from=builder /app/main .
+COPY _data/ _data/
 
-# 3. Copy go mod and sum files
-COPY go.mod go.sum ./
-
-# 4. Download dependencies
-RUN go mod download
-
-# 5. Copy the source code
-COPY . .
-
-# 6. Build the application
-# We use -o main to name the binary
-RUN go build -o main .
-
-# 7. Expose the port (Zeabur will map this internally)
 EXPOSE 8080
-
-# 8. Command to run the executable
 CMD ["./main"]
